@@ -1,114 +1,220 @@
-import Image from "next/image";
-import { Geist, Geist_Mono } from "next/font/google";
+// pages/index.js
+import { useState, useEffect } from "react";
+import { PrivyProvider, usePrivy, useWallets } from "@privy-io/react-auth";
+import Head from "next/head";
+import toast from "react-hot-toast"; // Ensure you have this installed
+import { addressToEmptyAccount, createKernelAccount, createKernelAccountClient } from "@zerodev/sdk";
+import { signerToEcdsaValidator } from "@zerodev/ecdsa-validator";
+import { ENTRYPOINT_ADDRESS_V07, providerToSmartAccountSigner } from "permissionless";
+import { KERNEL_V3_1 } from "@zerodev/sdk/constants";
+import { toECDSASigner } from "@zerodev/permissions";
+import { CallPolicyVersion, toCallPolicy } from "@zerodev/permissions/policies";
+import { serializePermissionAccount, toPermissionValidator } from "@zerodev/permissions";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+function LoginButton() {
+  const { login, authenticated } = usePrivy();
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export default function Home() {
   return (
-    <div
-      className={`${geistSans.variable} ${geistMono.variable} grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]`}
+    <button
+      type="button"
+      onClick={authenticated ? undefined : login}
+      className="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 me-2 mb-2 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none dark:focus:ring-blue-800"
     >
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              pages/index.js
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+      {authenticated ? "Connected" : "Login"}
+    </button>
+  );
+}
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+function MainApp() {
+
+  const { authenticated, user } = usePrivy();
+  const { wallets } = useWallets();
+  const [smartWallet, setSmartWallet] = useState(null);
+
+  // Async function to create a smart wallet
+  async function getSmartWallet(wallets, strategy) {
+    try {
+      const embeddedWallet = wallets.find(
+        (wallet) => wallet.walletClientType === "privy"
+      );
+      if (!embeddedWallet) {
+        toast.error("No Privy embedded wallet found");
+        throw new Error("No Privy embedded wallet found");
+      }
+
+      const provider = await embeddedWallet.getEthereumProvider();
+      const smartAccountSigner = await providerToSmartAccountSigner(provider);
+      const publicClient = createPublicClient(); // Ensure this is properly defined
+
+      const ecdsaValidator = await signerToEcdsaValidator(publicClient, {
+        signer: smartAccountSigner,
+        entryPoint: ENTRYPOINT_ADDRESS_V07,
+        kernelVersion: KERNEL_V3_1,
+      });
+
+      // Use strategy.key as an index to ensure the same wallet is retrieved
+      const account = await createKernelAccount(publicClient, {
+        kernelVersion: KERNEL_V3_1,
+        plugins: {
+          sudo: ecdsaValidator,
+        },
+        entryPoint: ENTRYPOINT_ADDRESS_V07,
+        index: BigInt(strategy.key), // Using the same index for the same wallet
+      });
+
+      const smartWalletClient = createKernelAccountClient({
+        account,
+        chain: "your-chain-config", // Ensure this is defined properly
+        entryPoint: ENTRYPOINT_ADDRESS_V07,
+        bundlerTransport: http("your-bundler-rpc"),
+      });
+
+      setSmartWallet(smartWalletClient); // Store it in state
+      toast.success("Smart wallet initialized");
+    } catch (error) {
+      toast.error("Error creating smart wallet");
+      console.error("Error creating smart wallet:", error);
+    }
+  }
+
+  async approveSessionKey(params: {
+    sessionKeyAddress: `0x${string}`,
+    wallets: any[],
+    strategy: Strategy
+}) {
+    if (!params.sessionKeyAddress) {
+        toast.error("session key address is required");
+        throw new Error("Session key address is required");
+    }
+    try {
+        const publicClient = this.createPublicClient();
+        const embeddedWallet = params.wallets.find(
+            (wallet) => wallet.walletClientType === "privy"
+        );
+
+        if (!embeddedWallet) {
+            toast.error("No Privy embedded wallet found");
+            throw new Error("No Privy embedded wallet found");
+        }
+
+        const provider = await embeddedWallet.getEthereumProvider();
+        const smartAccountSigner = await providerToSmartAccountSigner(provider);
+
+        const ecdsaValidator = await signerToEcdsaValidator(publicClient, {
+            signer: smartAccountSigner,
+            entryPoint: ENTRYPOINT_ADDRESS_V07,
+            kernelVersion: KERNEL_V3_1,
+        });
+
+        const emptyAccount = addressToEmptyAccount(params.sessionKeyAddress);
+        const emptySessionKeySigner = await toECDSASigner({ signer: emptyAccount });
+
+        // In the approveSessionKey method, modify the permissionPlugin creation:
+
+        const permissionPlugin = await toPermissionValidator(publicClient, {
+            entryPoint: ENTRYPOINT_ADDRESS_V07,
+            signer: emptySessionKeySigner,
+            policies: [
+                // toCallPolicy({
+                //     policyVersion: CallPolicyVersion.V0_0_3,
+                //     permissions: [
+                //         {
+                //             target: ONE_INCH_AGGREGATOR_ADDRESS,
+                //             valueLimit: BigInt(maxInt256),
+                //             abi: ONE_INCH_ABI,
+                //             functionName: "swap",
+                //             args: [
+                //                 null, // executor: IAggregationExecutor
+                //                 null, // desc: SwapDescription struct
+                //                 null  // data: bytes                            
+                //             ]
+                //         }
+                //     ]
+                // })
+            ],
+            kernelVersion: KERNEL_V3_1,
+        });
+
+
+        const sessionKeyAccount = await createKernelAccount(publicClient, {
+            entryPoint: ENTRYPOINT_ADDRESS_V07,
+            plugins: {
+                sudo: ecdsaValidator,
+                regular: permissionPlugin,
+            },
+            kernelVersion: KERNEL_V3_1,
+            index: BigInt(params.strategy.key),
+        });
+
+        return serializePermissionAccount(sessionKeyAccount);
+    } catch (error) {
+        toast.error("Failed to approve session key");
+        console.error("Error approving session key:", error);
+        throw error;
+    }
+}
+
+
+  // Call getSmartWallet when wallets are ready
+  useEffect(() => {
+    if (wallets && wallets.length > 0) {
+      console.log("hello world");
+      getSmartWallet(wallets, { key: 1 }); // Set a fixed index for now
+    }
+  }, [wallets]);
+
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center p-24">
+      <div className="flex flex-col items-center justify-center gap-6">
+        <h1 className="text-4xl font-bold">Privy Login Demo</h1>
+        
+        <LoginButton />
+        
+        {authenticated && (
+          <div className="mt-4 p-4 border rounded-lg bg-gray-50">
+            <h2 className="text-xl font-semibold mb-2">Connected User</h2>
+            <p>User ID: {user?.id}</p>
+            <p>Email: {user?.email?.address || "Not provided"}</p>
+            <p>Wallet: {wallets?.[0]?.address || "No wallet"}</p>
+            {smartWallet && <p className="text-green-600">Smart Wallet Initialized</p>}
+          </div>
+        )}
+      </div>
     </div>
+  );
+}
+
+// Root Component with Provider
+export default function Home() {
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  if (!isClient) {
+    return <div>Loading...</div>;
+  }
+
+  return (
+    <>
+      <Head>
+        <title>Privy Login Demo</title>
+        <meta name="description" content="A proof of concept for Privy authentication" />
+      </Head>
+      
+      <PrivyProvider
+        appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID}
+        config={{
+          embedded: { 
+            ethereum: { 
+              createOnLogin: "users-without-wallets",
+            }, 
+          },
+        }}
+      >
+        <MainApp />
+      </PrivyProvider>
+    </>
   );
 }
