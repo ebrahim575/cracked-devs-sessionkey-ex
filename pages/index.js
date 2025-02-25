@@ -10,6 +10,10 @@ import { KERNEL_V3_1 } from "@zerodev/sdk/constants";
 import { toECDSASigner } from "@zerodev/permissions";
 import { CallPolicyVersion, toCallPolicy } from "@zerodev/permissions/policies";
 import { serializePermissionAccount, toPermissionValidator } from "@zerodev/permissions";
+import { toSudoPolicy } from "@zerodev/permissions/policies"
+ 
+
+
 
 function LoginButton() {
   const { login, authenticated } = usePrivy();
@@ -110,11 +114,13 @@ function MainApp() {
         const emptySessionKeySigner = await toECDSASigner({ signer: emptyAccount });
 
         // In the approveSessionKey method, modify the permissionPlugin creation:
+        const sudoPolicy = toSudoPolicy({})
 
         const permissionPlugin = await toPermissionValidator(publicClient, {
             entryPoint: ENTRYPOINT_ADDRESS_V07,
             signer: emptySessionKeySigner,
             policies: [
+              sudoPolicy
                 // toCallPolicy({
                 //     policyVersion: CallPolicyVersion.V0_0_3,
                 //     permissions: [
