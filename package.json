@@ -1,31 +1,37 @@
 {
-  "name": "privy-poc",
-  "version": "0.1.0",
   "private": true,
+  "engines": {
+    "npm": ">=9.0.0",
+    "node": ">=18.0.0"
+  },
   "scripts": {
+    "clean": "rm -rf .next out node_modules",
+    "reinstall": "npm run clean && npm install",
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --no-lint",
     "start": "next start",
-    "lint": "next lint"
+    "ci-build": "npm run reinstall && npm run build",
+    "format": "npx prettier --write \"{__tests__,components,pages,styles}/**/*.{ts,tsx,js,jsx}\"",
+    "lint": "next lint && npx prettier --check \"{__tests__,components,pages,styles}/**/*.{ts,tsx,js,jsx}\" && npx tsc --noEmit"
   },
   "dependencies": {
-    "@privy-io/react-auth": "^2.4.5",
-    "@zerodev/ecdsa-validator": "^5.4.4",
-    "@zerodev/permissions": "^5.5.2",
-    "@zerodev/sdk": "^5.4.23",
-    "next": "15.1.7",
-    "permissionless": "^0.2.34",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "@privy-io/react-auth": "^1.93.0",
+    "@zerodev/ecdsa-validator": "^5.3.2",
+    "@zerodev/permissions": "^5.4.5",
+    "@zerodev/sdk": "^5.3.13",
+    "@zerodev/webauthn-key": "^5.4.2",
+    "next": "^15.1.7",
+    "permissionless": "^0.1.29",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "react-hot-toast": "^2.5.2",
     "use-sync-external-store": "^1.4.0",
-    "viem": "^2.23.5"
+    "viem": "^2.21.6"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3",
-    "eslint": "^9",
-    "eslint-config-next": "15.1.7",
-    "postcss": "^8",
-    "tailwindcss": "^3.4.1"
+    "eslint": "^8.23.0",
+    "eslint-config-next": "^15.1.7",
+    "postcss": "^8.4.14",
+    "tailwindcss": "^3.1.2"
   }
 }
